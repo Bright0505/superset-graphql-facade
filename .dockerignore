@@ -1,0 +1,15 @@
+node_modules
+dist
+coverage
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+.github
+*.log
+.DS_Store
+PROGRESS.md
+PLAN.md
+README.md
+CHANGELOG.md

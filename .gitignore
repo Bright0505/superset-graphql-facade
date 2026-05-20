@@ -1,0 +1,13 @@
+node_modules/
+dist/
+coverage/
+# Negate root-level cache/ rule so src/cache/ is tracked
+!src/cache/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+.vscode/
+.idea/
+*.tsbuildinfo

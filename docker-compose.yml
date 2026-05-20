@@ -1,0 +1,62 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+# 本子專案獨立的 docker-compose,不影響 root gt-war-room 的 Superset 開發環境。
+#
+# 使用方式:
+#   cd superset-graphql-facade
+#   cp .env.example .env   # 編輯 SUPERSET_PASSWORD 等
+#   docker compose up --build
+#
+# 連線目標:預設 facade 連到外部 Superset (SUPERSET_URL),
+#          Redis 在 compose 內 (Phase 2 起使用)。
+
+services:
+  facade:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: superset-graphql-facade:dev
+    container_name: superset-graphql-facade
+    restart: unless-stopped
+    ports:
+      - "${PORT:-4000}:4000"
+    env_file:
+      - .env
+    environment:
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - facade-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: superset-graphql-facade-redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - facade-net
+
+networks:
+  facade-net:
+    driver: bridge
