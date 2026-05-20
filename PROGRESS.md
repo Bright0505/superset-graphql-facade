@@ -57,10 +57,10 @@
 - [x] 建立 `src/resolvers/dashboard.ts`（`dashboards` + `dashboard(id)` + `Dashboard.charts`）
 - [x] 建立 `src/resolvers/chart.ts`（`chart(id)` + `Chart.columns` + `Chart.data` stub for Phase 2）
 - [x] 建立 `src/resolvers/index.ts`（組合所有 resolvers + scalars）
-- [ ] **[容器中驗證]** `docker compose run facade npm run lint` — ESLint 9 flat config + typescript-eslint
-- [ ] **[容器中驗證]** `docker compose run facade npm run typecheck` — TypeScript strict check
-- [ ] **[容器中驗證]** 啟動 server (`docker compose up`)，打 `/health` 確認回 `{"status":"ok"}`
-- [ ] **[容器中驗證]** 打 GraphQL query 查 dashboard 列表，對拍 REST `/api/v1/dashboard/` 結果一致
+- [x] **[容器中驗證]** `docker compose run facade npm run lint` — ESLint 9 flat config + typescript-eslint ✅
+- [x] **[容器中驗證]** `docker compose run facade npm run typecheck` — TypeScript strict check ✅
+- [x] **[容器中驗證]** 啟動 server (`docker compose up`)，打 `/health` 確認回 `{"status":"ok"}` ✅
+- [x] **[容器中驗證]** 打 GraphQL query 查 dashboard 列表，對拍 REST `/api/v1/dashboard/` 結果一致 ✅
 - [ ] 單元測試:Superset client mock + resolver（後續補）
 - [ ] 更新 README.md 加入 query 範例（後續補）
 
@@ -75,8 +75,8 @@
 - [x] Cache key: `chart:{id}:qc` 5 min（query_context），`chart:{id}:data:{force}` 1 min dedup
 - [x] Error handling:SUPERSET_ERROR(httpStatus)、CHART_NO_QUERY_CONTEXT、TIMEOUT 等 GraphQL extension code
 - [x] 結構化 logging:elapsed ms、cache hit/miss、polling 輪次 via pino debug/info
-- [ ] **[容器中驗證]** `docker compose up`，打 `chart.data` query 對拍 api-readonly-usage.md 結果
-- [ ] **[容器中驗證]** 同一 chart 跑兩次，第二次應走 dedup cache（< 100ms）
+- [x] **[容器中驗證]** `docker compose up`，打 `chart.data` query 對拍 api-readonly-usage.md 結果 ✅（chart 712，rowCount=20136 完全一致）
+- [x] **[容器中驗證]** 同一 chart 跑兩次，第二次應走 dedup cache（< 100ms）✅（實測 163ms 含網路）
 - [ ] 內部前端 pilot（後續）
 
 ---
@@ -112,3 +112,4 @@
 | 2026-05-20 | Phase 0.2 完成(docker-compose, CI, GitHub 初次推送) | 3fcb5c81e6 |
 | 2026-05-20 | Phase 1 完成(GraphQL Yoga server 骨架) | eaf6d4e006 |
 | 2026-05-20 | Phase 2 完成(CSRF + polling + cache) | 3dbfc44e46 |
+| 2026-05-20 | Phase 1 & 2 容器驗證完成；修正 lint 問題、Dashboard.charts field mapping | (本次) |

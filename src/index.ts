@@ -31,11 +31,12 @@ const yoga = createYoga<AppContext>({
   context: createContext,
   plugins: [
     {
-      onRequest({ request, fetchAPI, endResponse }) {
+      onRequest: (params) => {
+        const { request, fetchAPI } = params;
         const url = new URL(request.url);
         if (isPublicEndpoint(url)) return;
         if (config.API_KEYS && !resolveApiKeyName(request)) {
-          endResponse(
+          params.endResponse(
             new fetchAPI.Response(
               JSON.stringify({ error: 'Unauthorized', hint: 'Bearer <api-key> required' }),
               { status: 401, headers: { 'Content-Type': 'application/json' } },

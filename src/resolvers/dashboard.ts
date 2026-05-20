@@ -84,20 +84,26 @@ export const dashboardResolvers = {
 };
 
 // Shared type needed by Dashboard.charts resolver
+// /api/v1/dashboard/{id}/charts returns viz_type and datasource inside form_data
 interface SupersetChart {
   id: number;
   slice_name: string;
-  viz_type: string;
   description: string | null;
-  datasource_id: number | null;
+  form_data: {
+    viz_type?: string;
+    datasource?: string; // format: "{id}__table"
+  };
 }
 
 function mapChart(c: SupersetChart) {
+  const datasourceId = c.form_data.datasource
+    ? Number(c.form_data.datasource.split('__')[0])
+    : null;
   return {
     id: String(c.id),
     name: c.slice_name,
-    vizType: c.viz_type,
+    vizType: c.form_data.viz_type ?? '',
     description: c.description ?? null,
-    datasourceId: c.datasource_id ?? null,
+    datasourceId: isNaN(datasourceId ?? NaN) ? null : datasourceId,
   };
 }

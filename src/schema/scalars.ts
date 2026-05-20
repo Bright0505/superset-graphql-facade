@@ -13,9 +13,7 @@ import { GraphQLScalarType, Kind } from 'graphql';
 export const JSONScalar = new GraphQLScalarType({
   name: 'JSON',
   description: 'Arbitrary JSON value',
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-return
   serialize: (value) => value,
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-return
   parseValue: (value) => value,
   parseLiteral: (ast) => {
     if (ast.kind === Kind.STRING) {
