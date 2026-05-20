@@ -81,13 +81,19 @@
 
 ---
 
-## Phase 3 — AI / External(後續)
+## Phase 3 — AI / External
 
-- [ ] 設計 `chartIntrospection` query(LLM 可讀的 description + parameters + 範例)
-- [ ] OAuth 流程(對外合作夥伴)
-- [ ] Rate limit 與 quota(per API key)
-- [ ] OpenAPI / GraphQL schema 公開文件
-- [ ] AI Agent integration POC(LangChain / MCP tool wrapper)
+- [x] 設計並實作 `chartIntrospection` query — description + parameters + exampleQuery ✅
+  - `src/resolvers/introspection.ts`：合併 chart description 與 dataset column/metric metadata
+  - 5 分鐘 in-memory cache
+- [x] Rate limit 與 quota(per API key) ✅
+  - `src/auth/rateLimit.ts`：sliding-window per client name（RATE_LIMIT_RPM env）
+  - 超限回 429 + Retry-After + X-RateLimit-* headers
+- [x] GraphQL schema 公開文件 ✅
+  - `GET /schema` → SDL 純文字
+  - GraphQL Playground 已內建於 `GET /graphql`
+- [ ] OAuth 流程(對外合作夥伴)（後續）
+- [ ] AI Agent integration POC — MCP tool wrapper（後續）
 
 ---
 
@@ -112,4 +118,5 @@
 | 2026-05-20 | Phase 0.2 完成(docker-compose, CI, GitHub 初次推送) | 3fcb5c81e6 |
 | 2026-05-20 | Phase 1 完成(GraphQL Yoga server 骨架) | eaf6d4e006 |
 | 2026-05-20 | Phase 2 完成(CSRF + polling + cache) | 3dbfc44e46 |
-| 2026-05-20 | Phase 1 & 2 容器驗證完成；修正 lint 問題、Dashboard.charts field mapping | (本次) |
+| 2026-05-20 | Phase 1 & 2 容器驗證完成；修正 lint 問題、Dashboard.charts field mapping | 89b7853 |
+| 2026-05-20 | Phase 3 完成：chartIntrospection query、rate limiting、/schema endpoint | (本次) |

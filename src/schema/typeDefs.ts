@@ -57,6 +57,30 @@ export const typeDefs = /* GraphQL */ `
     query: String
   }
 
+  """AI Agent / LLM 可讀的圖表 introspection 資訊"""
+  type ChartIntrospection {
+    chartId: ID!
+    chartName: String!
+    vizType: String!
+    "自然語言描述（chart description + 欄位摘要），適合作為 LLM tool description"
+    description: String!
+    "可使用的查詢參數（維度、指標、時間欄位）"
+    parameters: [Parameter!]!
+    "可直接複製執行的 GraphQL query 範例"
+    exampleQuery: String!
+  }
+
+  """圖表可接受的查詢參數描述"""
+  type Parameter {
+    name: String!
+    label: String
+    "DATETIME / STRING / NUMERIC / BOOLEAN"
+    type: String
+    "true = 指標(metric)，false = 維度(dimension)"
+    isMetric: Boolean!
+    description: String
+  }
+
   type Query {
     "列出 Dashboard，支援關鍵字搜尋與分頁"
     dashboards(
@@ -70,5 +94,8 @@ export const typeDefs = /* GraphQL */ `
 
     "取得單一 Chart"
     chart(id: ID!): Chart
+
+    "取得 AI Agent 可讀的圖表 introspection（description + parameters + 範例 query）"
+    chartIntrospection(id: ID!): ChartIntrospection!
   }
 `;

@@ -23,6 +23,8 @@ import { typeDefs } from './schema/typeDefs.js';
 import { resolvers } from './resolvers/index.js';
 import { createContext, type AppContext } from './auth/context.js';
 import { resolveApiKeyName, isPublicEndpoint } from './auth/apiKey.js';
+import { checkRateLimit, getRateLimitRemaining } from './auth/rateLimit.js';
+import { printSchema } from 'graphql';
 
 const schema = createSchema<AppContext>({ typeDefs, resolvers });
 
@@ -35,13 +37,40 @@ const yoga = createYoga<AppContext>({
         const { request, fetchAPI } = params;
         const url = new URL(request.url);
         if (isPublicEndpoint(url)) return;
-        if (config.API_KEYS && !resolveApiKeyName(request)) {
+
+        // Auth check
+        const clientName = resolveApiKeyName(request);
+        if (config.API_KEYS && !clientName) {
           params.endResponse(
             new fetchAPI.Response(
               JSON.stringify({ error: 'Unauthorized', hint: 'Bearer <api-key> required' }),
               { status: 401, headers: { 'Content-Type': 'application/json' } },
             ),
           );
+          return;
+        }
+
+        // Rate limit (skip when RPM=0 or no API key required)
+        if (config.RATE_LIMIT_RPM > 0 && clientName) {
+          const allowed = checkRateLimit(clientName, config.RATE_LIMIT_RPM);
+          if (!allowed) {
+            const remaining = getRateLimitRemaining(clientName, config.RATE_LIMIT_RPM);
+            logger.warn({ clientName, remaining }, 'Rate limit exceeded');
+            params.endResponse(
+              new fetchAPI.Response(
+                JSON.stringify({ error: 'Too Many Requests', retryAfterSeconds: 60 }),
+                {
+                  status: 429,
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Retry-After': '60',
+                    'X-RateLimit-Limit': String(config.RATE_LIMIT_RPM),
+                    'X-RateLimit-Remaining': String(remaining),
+                  },
+                },
+              ),
+            );
+          }
         }
       },
     },
@@ -49,10 +78,17 @@ const yoga = createYoga<AppContext>({
   logging: false,
 });
 
+const schemaSDL = printSchema(schema);
+
 const server = createServer((req, res) => {
   if (req.url === '/health' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'ok' }));
+    return;
+  }
+  if (req.url === '/schema' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end(schemaSDL);
     return;
   }
   void yoga(req, res);

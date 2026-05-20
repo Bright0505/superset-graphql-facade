@@ -31,6 +31,8 @@ const schema = z.object({
   REDIS_URL: z.string().optional(),
   // 逗號分隔的 "name:key" 格式，例如 "frontend:abc123,partner:xyz789"
   API_KEYS: z.string().default(''),
+  // 每個 API key 每分鐘最大請求數，0 = 停用 rate limit
+  RATE_LIMIT_RPM: z.coerce.number().min(0).default(60),
 });
 
 function parseConfig() {

@@ -10,6 +10,7 @@
 
 import { dashboardResolvers } from './dashboard.js';
 import { chartResolvers } from './chart.js';
+import { introspectionResolvers } from './introspection.js';
 import { JSONScalar, DateTimeScalar } from '../schema/scalars.js';
 
 export const resolvers = {
@@ -19,6 +20,7 @@ export const resolvers = {
   Query: {
     ...dashboardResolvers.Query,
     ...chartResolvers.Query,
+    ...introspectionResolvers.Query,
   },
 
   Dashboard: {
