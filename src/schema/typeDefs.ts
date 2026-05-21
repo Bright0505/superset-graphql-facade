@@ -12,14 +12,22 @@ export const typeDefs = /* GraphQL */ `
   scalar JSON
   scalar DateTime
 
+  """Dashboard 頁籤（來自 position_json TAB 節點）"""
+  type DashboardTab {
+    id: ID!
+    name: String!
+  }
+
   """Superset Dashboard"""
   type Dashboard {
     id: ID!
     title: String!
     slug: String
     published: Boolean!
-    "Dashboard 內所有圖表（來自 /api/v1/dashboard/{id}/charts）"
-    charts: [Chart!]!
+    "Dashboard 頁籤清單（來自 position_json）"
+    tabs: [DashboardTab!]!
+    "Dashboard 內圖表；若傳入 tab，則只回傳該頁籤內的圖表"
+    charts(tab: ID): [Chart!]!
   }
 
   """Superset Chart（Slice）"""
@@ -30,8 +38,8 @@ export const typeDefs = /* GraphQL */ `
     description: String
     "欄位與指標清單（metadata，來自 dataset）"
     columns: [Column!]!
-    "查詢實際數值，Façade 內部處理 CSRF + async polling（Phase 2 實作）"
-    data(force: Boolean = false): ChartData!
+    "查詢實際數值；filters 會注入 Superset query_context 的 queries[0].filters"
+    data(force: Boolean = false, filters: [ChartFilter!]): ChartData!
   }
 
   """欄位定義（維度或指標）"""
@@ -79,6 +87,15 @@ export const typeDefs = /* GraphQL */ `
     "true = 指標(metric)，false = 維度(dimension)"
     isMetric: Boolean!
     description: String
+  }
+
+  """圖表資料篩選條件"""
+  input ChartFilter {
+    col: String!
+    "支援運算子: ==, !=, IN, NOT IN, >, <, >=, <="
+    op: String!
+    "篩選值（可為純量、陣列或 null）"
+    val: JSON!
   }
 
   type Query {

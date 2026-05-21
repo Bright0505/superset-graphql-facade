@@ -11,7 +11,7 @@
 import { supersetClient } from '../superset/client.js';
 import { fetchChartData } from '../superset/polling.js';
 import { logger } from '../logger.js';
-import type { SupersetDatasetColumn, SupersetDatasetMetric, SupersetDatasetResponse } from '../superset/types.js';
+import type { SupersetDatasetColumn, SupersetDatasetMetric, SupersetDatasetResponse, ChartFilter } from '../superset/types.js';
 
 interface SupersetChart {
   id: number;
@@ -81,8 +81,11 @@ export const chartResolvers = {
       }
     },
 
-    async data(parent: { id: string }, args: { force?: boolean | null }) {
-      return fetchChartData(parent.id, args.force ?? false);
+    async data(
+      parent: { id: string },
+      args: { force?: boolean | null; filters?: ChartFilter[] | null },
+    ) {
+      return fetchChartData(parent.id, args.force ?? false, args.filters ?? undefined);
     },
   },
 };

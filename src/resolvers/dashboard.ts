@@ -10,12 +10,15 @@
 
 import { supersetClient } from '../superset/client.js';
 import { logger } from '../logger.js';
+import { cache } from '../cache/index.js';
+import type { PositionNode, PositionJson } from '../superset/types.js';
 
 interface SupersetDashboard {
   id: number;
   dashboard_title: string;
   slug: string | null;
   published: boolean;
+  position_json?: string;
 }
 
 interface DashboardListResponse {
@@ -34,6 +37,48 @@ function mapDashboard(d: SupersetDashboard) {
     slug: d.slug ?? null,
     published: d.published,
   };
+}
+
+const POSITION_CACHE_TTL_S = 300;
+
+export function parseTabs(pos: PositionJson): Array<{ id: string; name: string }> {
+  return Object.values(pos)
+    .filter((node): node is PositionNode => node.type === 'TAB')
+    .map((node) => ({
+      id: node.id,
+      name: node.meta?.text ?? node.meta?.defaultText ?? node.id,
+    }));
+}
+
+export function getChartIdsInTab(pos: PositionJson, tabId: string): Set<number> {
+  const ids = new Set<number>();
+  for (const node of Object.values(pos)) {
+    if (
+      node.type === 'CHART' &&
+      node.parents?.includes(tabId) === true &&
+      typeof node.meta?.chartId === 'number'
+    ) {
+      ids.add(node.meta.chartId);
+    }
+  }
+  return ids;
+}
+
+async function fetchPositionJson(dashboardId: string): Promise<PositionJson | null> {
+  const cacheKey = `dashboard:${dashboardId}:position`;
+  const hit = cache.get(cacheKey);
+  if (hit) {
+    logger.debug({ dashboardId }, 'position_json cache hit');
+    return JSON.parse(hit) as PositionJson;
+  }
+  const data = await supersetClient.get<{ result: { position_json?: string } }>(
+    `/api/v1/dashboard/${dashboardId}`,
+  );
+  const raw = data.result.position_json;
+  if (!raw) return null;
+  const parsed = JSON.parse(raw) as PositionJson;
+  cache.set(cacheKey, JSON.stringify(parsed), POSITION_CACHE_TTL_S);
+  return parsed;
 }
 
 function buildRisonFilter(search?: string | null, page = 0, pageSize = 25): string {
@@ -74,11 +119,24 @@ export const dashboardResolvers = {
   },
 
   Dashboard: {
-    async charts(parent: { id: string }) {
+    async tabs(parent: { id: string }) {
+      const pos = await fetchPositionJson(parent.id);
+      if (!pos) return [];
+      return parseTabs(pos);
+    },
+
+    async charts(parent: { id: string }, args: { tab?: string | null }) {
       const data = await supersetClient.get<{ result: SupersetChart[] }>(
         `/api/v1/dashboard/${parent.id}/charts`,
       );
-      return data.result.map(mapChart);
+      const allCharts = data.result.map(mapChart);
+      if (!args.tab) return allCharts;
+
+      const pos = await fetchPositionJson(parent.id);
+      if (!pos) return allCharts;
+
+      const allowed = getChartIdsInTab(pos, args.tab);
+      return allCharts.filter((c) => allowed.has(Number(c.id)));
     },
   },
 };

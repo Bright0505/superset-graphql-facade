@@ -33,3 +33,24 @@ export interface SupersetDatasetDetail {
 export interface SupersetDatasetResponse {
   result: SupersetDatasetDetail;
 }
+
+export interface PositionNode {
+  id: string;
+  type: string;
+  children?: string[];
+  parents?: string[];
+  meta?: {
+    text?: string;
+    defaultText?: string;
+    chartId?: number;
+    [key: string]: unknown;
+  };
+}
+
+export type PositionJson = Record<string, PositionNode>;
+
+export interface ChartFilter {
+  col: string;
+  op: string;
+  val: unknown;
+}

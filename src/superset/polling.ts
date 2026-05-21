@@ -14,6 +14,7 @@ import { createCsrfSession } from './csrf.js';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
 import { cache } from '../cache/index.js';
+import type { ChartFilter } from './types.js';
 
 const POLL_INTERVAL_MS = 5_000;
 const POLL_TIMEOUT_MS = 90_000;
@@ -22,8 +23,14 @@ const DATA_DEDUP_TTL_S = 60; // data dedup cache 1 分鐘
 
 // ---- Superset API 型別 ----
 
+interface QueryContextQuery {
+  filters?: ChartFilter[];
+  [key: string]: unknown;
+}
+
 interface QueryContext {
   force?: boolean;
+  queries?: QueryContextQuery[];
   [key: string]: unknown;
 }
 
@@ -91,9 +98,11 @@ function sleep(ms: number): Promise<void> {
 export async function fetchChartData(
   chartId: string,
   force: boolean,
+  filters?: ChartFilter[],
 ): Promise<ChartDataPayload> {
   // In-memory dedup cache：避免多個 client 同時打同一 chart
-  const dedupKey = `chart:${chartId}:data:${String(force)}`;
+  const filtersHash = JSON.stringify(filters ?? []);
+  const dedupKey = `chart:${chartId}:data:${String(force)}:${filtersHash}`;
   if (!force) {
     const hit = cache.get(dedupKey);
     if (hit) {
@@ -138,10 +147,24 @@ export async function fetchChartData(
     Referer: config.SUPERSET_URL,
   };
 
+  // 注入 caller 提供的 filters 到 queries[0].filters（不異動 qc 快取）
+  let effectiveQueryContext: QueryContext = queryContext;
+  if (filters && filters.length > 0) {
+    const baseFilters: ChartFilter[] = queryContext.queries?.[0]?.filters ?? [];
+    const mergedQueries: QueryContextQuery[] = [
+      {
+        ...(queryContext.queries?.[0] ?? {}),
+        filters: [...baseFilters, ...filters],
+      },
+      ...(queryContext.queries?.slice(1) ?? []),
+    ];
+    effectiveQueryContext = { ...queryContext, queries: mergedQueries };
+  }
+
   // 第一次 POST（force 由 GraphQL client 決定）
   // - force:false → Superset 回傳 cached 結果或 trigger async job
   // - force:true  → Superset 忽略 cache，重新 trigger async job
-  const initialBody = JSON.stringify({ ...queryContext, force });
+  const initialBody = JSON.stringify({ ...effectiveQueryContext, force });
   const initialRes = await fetch(`${config.SUPERSET_URL}/api/v1/chart/data`, {
     method: 'POST',
     headers,
@@ -165,7 +188,7 @@ export async function fetchChartData(
   }
 
   // Polling loop — 使用同一組 headers（不重新取 CSRF）
-  const pollBody = JSON.stringify({ ...queryContext, force: false });
+  const pollBody = JSON.stringify({ ...effectiveQueryContext, force: false });
   const deadline = Date.now() + POLL_TIMEOUT_MS;
   let elapsed = 0;
 
