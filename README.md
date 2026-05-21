@@ -74,6 +74,20 @@ docker run --rm -p 4000:4000 --env-file .env superset-graphql-facade
 docker compose up
 ```
 
+### CI/CD 部署架構(dev / production)
+
+CI/CD 在 `.gitlab-ci.yml` 部署 facade 時,會建立兩個容器加入主 stack 的 docker network(`gt-war-room-network[-dev]`):
+
+| 容器 | 對外 port | 說明 |
+|------|----------|------|
+| `gt-war-room-superset-internal[-dev]` | 無(僅 docker network 內) | facade 專用 Superset。載入 `docker/pythonpath_facade/superset_config.py`,僅覆寫 `DASHBOARD_RBAC=False` 與 `TALISMAN_ENABLED=False`,**不跑 init**,共用主 stack 的 metadata DB 與 Redis(直接享受 `cache.warmup_cache` 預熱) |
+| `gt-war-room-graphql-facade[-dev]` | `${PROD_FACADE_PORT}` / `${DEV_FACADE_PORT}` (預設 4000 / 4001) | facade GraphQL server。`SUPERSET_URL` 由 CI 注入指向 `gt-war-room-superset-internal[-dev]:8088` |
+
+facade 容器使用獨立的 GitLab CI/CD file-type variable(`DEV_API` / `PROD_API`)作為 `--env-file`,內容範例見 [.env.example](./.env.example) 上方註解。
+
+> **為何需要內部 Superset 容器?**
+> 主 Superset 啟用 `DASHBOARD_RBAC`,非 Admin role(包含 facade 帳號)即使有全域 dashboard 讀取權限,沒被列在每個 dashboard 的 role 名單內就會被列表 API 過濾掉(回空清單)。內部 Superset 容器專門關閉 `DASHBOARD_RBAC` 讓 facade 能讀全部 dashboards,主 Superset UI 端的 RBAC 行為不受影響。
+
 ---
 
 ## 目錄結構
