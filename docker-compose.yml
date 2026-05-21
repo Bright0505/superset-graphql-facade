@@ -26,6 +26,22 @@
 #          Redis 在 compose 內 (Phase 2 起使用)。
 
 services:
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    image: superset-graphql-facade:test
+    container_name: superset-graphql-facade-test
+    environment:
+      NODE_ENV: test
+      SUPERSET_URL: http://placeholder
+      SUPERSET_USERNAME: test
+      SUPERSET_PASSWORD: test
+    command: ["npm", "test"]
+    profiles:
+      - test
+
   facade:
     build:
       context: .

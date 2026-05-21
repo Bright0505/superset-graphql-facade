@@ -11,6 +11,7 @@
 import { supersetClient } from '../superset/client.js';
 import { logger } from '../logger.js';
 import { cache } from '../cache/index.js';
+import type { SupersetDatasetColumn, SupersetDatasetMetric, SupersetDatasetDetail } from '../superset/types.js';
 
 const INTROSPECTION_CACHE_TTL_S = 300; // 5 分鐘
 
@@ -23,24 +24,6 @@ interface SupersetChartDetail {
   query_context: string | null;
 }
 
-interface SupersetDatasetColumn {
-  column_name: string;
-  verbose_name: string | null;
-  type: string | null;
-  is_dttm: boolean;
-}
-
-interface SupersetDatasetMetric {
-  metric_name: string;
-  verbose_name: string | null;
-  description: string | null;
-}
-
-interface SupersetDatasetDetail {
-  columns: SupersetDatasetColumn[];
-  metrics: SupersetDatasetMetric[];
-  table_name: string;
-}
 
 interface Parameter {
   name: string;
@@ -50,7 +33,7 @@ interface Parameter {
   description: string | null;
 }
 
-function buildDescription(
+export function buildDescription(
   chart: SupersetChartDetail,
   dataset: SupersetDatasetDetail | null,
 ): string {
@@ -88,7 +71,7 @@ function buildDescription(
   return parts.join('。');
 }
 
-function buildParameters(dataset: SupersetDatasetDetail | null): Parameter[] {
+export function buildParameters(dataset: SupersetDatasetDetail | null): Parameter[] {
   if (!dataset) return [];
 
   const params: Parameter[] = [];
@@ -116,7 +99,7 @@ function buildParameters(dataset: SupersetDatasetDetail | null): Parameter[] {
   return params;
 }
 
-function buildExampleQuery(chartId: string, chartName: string): string {
+export function buildExampleQuery(chartId: string, chartName: string): string {
   return [
     `# ${chartName}`,
     `query {`,

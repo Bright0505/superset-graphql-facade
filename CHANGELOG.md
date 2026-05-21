@@ -20,3 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Phase 2: chart data polling 流程（`src/superset/polling.ts`）：initial POST → 5s/次最多 90s
 - Phase 2: in-memory TTL cache（`src/cache/index.ts`）：query_context 5min、data dedup 1min
 - Phase 2: `Chart.data` resolver 接真實 fetchChartData，帶結構化 error code
+
+### Changed
+- 重構：將 `SupersetDatasetColumn`、`SupersetDatasetMetric`、`SupersetDatasetDetail` 等重複型別定義合併至 `src/superset/types.ts`，chart.ts 與 introspection.ts 改從共用型別 import
+- 新增 `src/resolvers/chart.test.ts` 與 `src/resolvers/introspection.test.ts`，涵蓋 mapColumn/mapMetric/buildDescription/buildParameters 等 pure function 的單元測試
+- 新增 docker-compose `test` service（profile: test），可於容器內執行 `docker compose --profile test run --rm test` 跑測試

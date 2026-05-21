@@ -11,6 +11,7 @@
 import { supersetClient } from '../superset/client.js';
 import { fetchChartData } from '../superset/polling.js';
 import { logger } from '../logger.js';
+import type { SupersetDatasetColumn, SupersetDatasetMetric, SupersetDatasetResponse } from '../superset/types.js';
 
 interface SupersetChart {
   id: number;
@@ -24,26 +25,6 @@ interface SupersetChartResponse {
   result: SupersetChart;
 }
 
-interface SupersetDatasetColumn {
-  column_name: string;
-  verbose_name: string | null;
-  type: string | null;
-  is_dttm: boolean;
-  expression: string | null;
-}
-
-interface SupersetDatasetMetric {
-  metric_name: string;
-  verbose_name: string | null;
-  expression: string;
-}
-
-interface SupersetDatasetResponse {
-  result: {
-    columns: SupersetDatasetColumn[];
-    metrics: SupersetDatasetMetric[];
-  };
-}
 
 function mapChart(c: SupersetChart) {
   return {
@@ -55,7 +36,7 @@ function mapChart(c: SupersetChart) {
   };
 }
 
-function mapColumn(col: SupersetDatasetColumn) {
+export function mapColumn(col: SupersetDatasetColumn) {
   return {
     name: col.column_name,
     label: col.verbose_name ?? null,
@@ -64,7 +45,7 @@ function mapColumn(col: SupersetDatasetColumn) {
   };
 }
 
-function mapMetric(m: SupersetDatasetMetric) {
+export function mapMetric(m: SupersetDatasetMetric) {
   return {
     name: m.metric_name,
     label: m.verbose_name ?? null,
