@@ -10,15 +10,19 @@
 
 import type { YogaInitialContext } from 'graphql-yoga';
 import { resolveApiKeyName, isPublicEndpoint } from './apiKey.js';
+import { resolveUserScope, type UserScope } from './userToken.js';
 
 export interface AppContext extends YogaInitialContext {
   clientName: string | null;
+  /** 使用者的 per-scope 身分，僅在 DATA_AUTH_MODE=per-scope 時非 null */
+  scope: UserScope | null;
 }
 
-export function createContext(initial: YogaInitialContext): AppContext {
+export async function createContext(initial: YogaInitialContext): Promise<AppContext> {
   const url = new URL(initial.request.url);
   const clientName = isPublicEndpoint(url)
     ? 'anonymous'
     : resolveApiKeyName(initial.request);
-  return { ...initial, clientName };
+  const scope = await resolveUserScope(initial.request);
+  return { ...initial, clientName, scope };
 }

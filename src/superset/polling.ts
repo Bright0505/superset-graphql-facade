@@ -9,7 +9,7 @@
 //   http://www.apache.org/licenses/LICENSE-2.0
 
 import { GraphQLError } from 'graphql';
-import { supersetClient } from './client.js';
+import { supersetClient, scopeTokenStore } from './client.js';
 import { createCsrfSession } from './csrf.js';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
@@ -91,28 +91,39 @@ function sleep(ms: number): Promise<void> {
  *
  * - force:false → 若 Superset 有快取則直接回傳，否則觸發 async 查詢後 polling
  * - force:true  → 強制重新查詢（忽略 Superset 快取）後 polling
+ * - scopeKey    → per-scope 模式下的範圍帳號 key（未設定時退為服務帳號）
  *
  * polling 流程期間全程使用同一組 CSRF token + cookie（不可重新取得，
  * 否則 async-token channel 會改變）。
+ *
+ * ⚠️ cache 安全規則：dedupKey 必須含 scopeKey，防止低權限者讀到高權限者的快取。
  */
 export async function fetchChartData(
   chartId: string,
   force: boolean,
   filters?: ChartFilter[],
+  scopeKey?: string | null,
 ): Promise<ChartDataPayload> {
-  // In-memory dedup cache：避免多個 client 同時打同一 chart
+  const isPerScope = config.DATA_AUTH_MODE === 'per-scope' && !!scopeKey;
+
+  // In-memory dedup cache：key 含 scopeKey（防跨範圍 cache 洩漏）
   const filtersHash = JSON.stringify(filters ?? []);
-  const dedupKey = `chart:${chartId}:data:${String(force)}:${filtersHash}`;
+  const scopePart = isPerScope ? scopeKey! : 'svc';
+  const dedupKey = `chart:${chartId}:data:${String(force)}:${scopePart}:${filtersHash}`;
   if (!force) {
     const hit = cache.get(dedupKey);
     if (hit) {
-      logger.debug({ chartId }, 'chart data dedup cache hit');
+      logger.debug({ chartId, scope: scopePart }, 'chart data dedup cache hit');
       return JSON.parse(hit) as ChartDataPayload;
     }
   }
 
   const start = Date.now();
-  const jwt = await supersetClient.getJwt();
+
+  // per-scope 模式：用範圍帳號 JWT；否則維持服務帳號（既有行為不變）
+  const jwt = isPerScope
+    ? await scopeTokenStore.getJwt(scopeKey!)
+    : await supersetClient.getJwt();
 
   // 每個請求獨立取 CSRF session，避免 async channel 共用
   const { csrfToken, cookieHeader } = await createCsrfSession(jwt);
