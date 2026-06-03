@@ -18,6 +18,8 @@
 
 ## 認證
 
+### 呼叫端認證（必要）
+
 所有 GraphQL 請求需在 HTTP Header 帶入 API Key：
 
 ```
@@ -29,6 +31,26 @@ API Key 由管理員在伺服器端 `API_KEYS` 環境變數設定，格式為 `n
 ```
 API_KEYS=internal-frontend:abcd1234,partner-x:efgh5678
 ```
+
+### 使用者身分（per-scope 模式）
+
+當伺服器設定 `DATA_AUTH_MODE=per-scope` 時，需額外傳入使用者的 IdP token，
+facade 會依此對應到對應的 Superset 範圍帳號，讓 Superset RBAC + RLS 執法。
+
+```
+X-User-Token: <idp-access-token>
+```
+
+| 伺服器環境變數 | 說明 |
+|--------------|------|
+| `DATA_AUTH_MODE` | `service-account`（預設，所有人同一帳號）或 `per-scope`（依範圍帳號執法） |
+| `USER_JWT_JWKS_URI` | IdP 的 JWKS 端點（設定後啟用簽章驗證；未設定則開發模式只 decode） |
+| `USER_JWT_ISSUER` | JWT `iss` 期望值（可選） |
+| `USER_JWT_AUDIENCE` | JWT `aud` 期望值（可選） |
+| `USER_JWT_SCOPE_CLAIM` | token 中代表範圍的 claim 欄位，預設 `region` |
+| `SCOPE_CREDENTIALS` | JSON：`{ "範圍key": "superset-username:password" }`（⚠️ 含密碼，請用 Secret Manager 注入） |
+
+> **安全注意事項**：`DATA_AUTH_MODE=service-account`（預設）時，`X-User-Token` 即使傳入也不會被解析，不影響現有行為。
 
 ### Rate Limit
 

@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- per-scope 資料認證架構（方案 A — 範圍帳號）：以 `DATA_AUTH_MODE=per-scope` 啟用；chart data 查詢走範圍帳號 JWT，Superset RBAC + RLS 在 SQL 層執法；預設 `service-account` 完全不影響既有行為。
+- `src/auth/userToken.ts`：解析 `X-User-Token` header 的使用者 IdP token，使用 `jose` 驗簽（設 `USER_JWT_JWKS_URI`）或開發模式僅 decode。
+- `ScopeTokenStore`（`src/superset/client.ts`）：per-scope Superset session，各範圍帳號各自獨立 JWT + 自動續期，憑證來自 `SCOPE_CREDENTIALS` env。
+- `AppContext.scope`：GraphQL context 加入使用者 scope，傳遞至 chart data resolver。
+- 新環境變數：`DATA_AUTH_MODE` / `USER_JWT_JWKS_URI` / `USER_JWT_ISSUER` / `USER_JWT_AUDIENCE` / `USER_JWT_SCOPE_CLAIM` / `SCOPE_CREDENTIALS`。
 - Phase 0.0: 子專案目錄與 PLAN.md / PROGRESS.md 持久化計劃
 - Phase 0.1: package.json, tsconfig.json, Dockerfile, ESLint/Prettier, Jest 配置
 - Phase 0.1: README.md, LICENSE (Apache-2.0), .gitignore, .env.example

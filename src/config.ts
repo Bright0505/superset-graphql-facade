@@ -93,6 +93,7 @@ export function parseScopeCredentials(
     return map;
   }
   for (const [scopeKey, cred] of Object.entries(parsed)) {
+    if (typeof cred !== 'string') continue;
     const colonIdx = cred.indexOf(':');
     if (colonIdx < 1) continue;
     const username = cred.slice(0, colonIdx).trim();
