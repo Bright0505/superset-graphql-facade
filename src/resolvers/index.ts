@@ -27,6 +27,10 @@ export const resolvers = {
     ...dashboardResolvers.Dashboard,
   },
 
+  DashboardFilter: {
+    ...dashboardResolvers.DashboardFilter,
+  },
+
   Chart: {
     ...chartResolvers.Chart,
   },

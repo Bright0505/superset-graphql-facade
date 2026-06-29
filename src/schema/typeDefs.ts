@@ -28,6 +28,26 @@ export const typeDefs = /* GraphQL */ `
     tabs: [DashboardTab!]!
     "Dashboard 內圖表；若傳入 tab，則只回傳該頁籤內的圖表"
     charts(tab: ID): [Chart!]!
+    "Dashboard 層級篩選器（來自 json_metadata.native_filter_configuration）"
+    filters: [DashboardFilter!]!
+  }
+
+  """Dashboard native filter（dashboard 層級篩選器定義）"""
+  type DashboardFilter {
+    "native filter id，如 NATIVE_FILTER-xxxx"
+    id: ID!
+    "顯示名稱（Superset 設定的 filter name）"
+    name: String!
+    "目標欄位名稱，對應 ChartFilter.col（如 小區 / 年月）"
+    column: String
+    "filterType：filter_select / filter_range / filter_time ..."
+    type: String!
+    "預設值（來自 defaultDataMask.filterState.value）"
+    defaultValue: JSON
+    "是否可多選"
+    multiple: Boolean!
+    "可選值清單（lazy：只有要求此欄位時才去 Superset 查 distinct）"
+    values(limit: Int = 1000): [JSON!]!
   }
 
   """Superset Chart（Slice）"""

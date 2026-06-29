@@ -9,9 +9,11 @@
 //   http://www.apache.org/licenses/LICENSE-2.0
 
 import { supersetClient } from '../superset/client.js';
+import { fetchColumnValues } from '../superset/polling.js';
 import { logger } from '../logger.js';
 import { cache } from '../cache/index.js';
 import type { PositionNode, PositionJson } from '../superset/types.js';
+import type { AppContext } from '../auth/context.js';
 
 interface SupersetDashboard {
   id: number;
@@ -19,6 +21,7 @@ interface SupersetDashboard {
   slug: string | null;
   published: boolean;
   position_json?: string;
+  json_metadata?: string;
 }
 
 interface DashboardListResponse {
@@ -64,21 +67,80 @@ export function getChartIdsInTab(pos: PositionJson, tabId: string): Set<number> 
   return ids;
 }
 
-async function fetchPositionJson(dashboardId: string): Promise<PositionJson | null> {
-  const cacheKey = `dashboard:${dashboardId}:position`;
+interface DashboardDetail {
+  position: PositionJson | null;
+  jsonMetadata: Record<string, unknown> | null;
+}
+
+/**
+ * 取 dashboard 詳情並解析 position_json + json_metadata（單一 REST、共用 cache）。
+ * tabs / charts(tab:) 用 position；filters 用 jsonMetadata。
+ */
+async function fetchDashboardDetail(dashboardId: string): Promise<DashboardDetail> {
+  const cacheKey = `dashboard:${dashboardId}:detail`;
   const hit = cache.get(cacheKey);
   if (hit) {
-    logger.debug({ dashboardId }, 'position_json cache hit');
-    return JSON.parse(hit) as PositionJson;
+    logger.debug({ dashboardId }, 'dashboard detail cache hit');
+    return JSON.parse(hit) as DashboardDetail;
   }
-  const data = await supersetClient.get<{ result: { position_json?: string } }>(
-    `/api/v1/dashboard/${dashboardId}`,
-  );
-  const raw = data.result.position_json;
-  if (!raw) return null;
-  const parsed = JSON.parse(raw) as PositionJson;
-  cache.set(cacheKey, JSON.stringify(parsed), POSITION_CACHE_TTL_S);
-  return parsed;
+  const data = await supersetClient.get<{
+    result: { position_json?: string; json_metadata?: string };
+  }>(`/api/v1/dashboard/${dashboardId}`);
+  const detail: DashboardDetail = {
+    position: data.result.position_json
+      ? (JSON.parse(data.result.position_json) as PositionJson)
+      : null,
+    jsonMetadata: data.result.json_metadata
+      ? (JSON.parse(data.result.json_metadata) as Record<string, unknown>)
+      : null,
+  };
+  cache.set(cacheKey, JSON.stringify(detail), POSITION_CACHE_TTL_S);
+  return detail;
+}
+
+async function fetchPositionJson(dashboardId: string): Promise<PositionJson | null> {
+  return (await fetchDashboardDetail(dashboardId)).position;
+}
+
+// ---- native filter 解析 ----
+
+interface NativeFilterTarget {
+  column?: { name?: string };
+  datasetId?: number;
+}
+
+interface NativeFilterConfig {
+  id: string;
+  name: string;
+  filterType?: string;
+  targets?: NativeFilterTarget[];
+  defaultDataMask?: { filterState?: { value?: unknown } };
+  controlValues?: { multiSelect?: boolean };
+}
+
+/** Dashboard.filters resolver 回傳的形狀（datasetId 為內部欄位，不暴露在 schema）*/
+export interface DashboardFilterShape {
+  id: string;
+  name: string;
+  column: string | null;
+  type: string;
+  defaultValue: unknown;
+  multiple: boolean;
+  datasetId: number | null;
+}
+
+export function parseNativeFilters(meta: Record<string, unknown>): DashboardFilterShape[] {
+  const configs = meta.native_filter_configuration;
+  if (!Array.isArray(configs)) return [];
+  return (configs as NativeFilterConfig[]).map((f) => ({
+    id: f.id,
+    name: f.name,
+    column: f.targets?.[0]?.column?.name ?? null,
+    type: f.filterType ?? '',
+    defaultValue: f.defaultDataMask?.filterState?.value ?? null,
+    multiple: f.controlValues?.multiSelect ?? true,
+    datasetId: f.targets?.[0]?.datasetId ?? null,
+  }));
 }
 
 function buildRisonFilter(search?: string | null, page = 0, pageSize = 25): string {
@@ -137,6 +199,28 @@ export const dashboardResolvers = {
 
       const allowed = getChartIdsInTab(pos, args.tab);
       return allCharts.filter((c) => allowed.has(Number(c.id)));
+    },
+
+    async filters(parent: { id: string }) {
+      const detail = await fetchDashboardDetail(parent.id);
+      if (!detail.jsonMetadata) return [];
+      return parseNativeFilters(detail.jsonMetadata);
+    },
+  },
+
+  DashboardFilter: {
+    async values(
+      parent: DashboardFilterShape,
+      args: { limit?: number | null },
+      ctx: AppContext,
+    ) {
+      if (!parent.column || parent.datasetId == null) return [];
+      return fetchColumnValues(
+        parent.datasetId,
+        parent.column,
+        args.limit ?? 1000,
+        ctx.scope?.scopeKey,
+      );
     },
   },
 };

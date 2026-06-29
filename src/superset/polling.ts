@@ -20,6 +20,7 @@ const POLL_INTERVAL_MS = 5_000;
 const POLL_TIMEOUT_MS = 90_000;
 const QC_CACHE_TTL_S = 300;  // query_context cache 5 分鐘
 const DATA_DEDUP_TTL_S = 60; // data dedup cache 1 分鐘
+const VALUES_CACHE_TTL_S = 300; // column distinct values cache 5 分鐘
 
 // ---- Superset API 型別 ----
 
@@ -149,15 +150,6 @@ export async function fetchChartData(
 
   const queryContext = JSON.parse(queryContextStr) as QueryContext;
 
-  // 整個流程共用的 headers（包含 CSRF + cookie）
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${jwt}`,
-    'Content-Type': 'application/json',
-    'X-CSRFToken': csrfToken,
-    Cookie: cookieHeader,
-    Referer: config.SUPERSET_URL,
-  };
-
   // 注入 caller 提供的 filters 到 queries[0].filters（不異動 qc 快取）
   let effectiveQueryContext: QueryContext = queryContext;
   if (filters && filters.length > 0) {
@@ -172,10 +164,127 @@ export async function fetchChartData(
     effectiveQueryContext = { ...queryContext, queries: mergedQueries };
   }
 
-  // 第一次 POST（force 由 GraphQL client 決定）
+  const result = await executeChartData(effectiveQueryContext, force, {
+    jwt,
+    csrfToken,
+    cookieHeader,
+    start,
+    logCtx: { chartId },
+  });
+  cache.set(dedupKey, JSON.stringify(result), DATA_DEDUP_TTL_S);
+  return result;
+}
+
+/**
+ * 取得某 dataset 欄位的 distinct 可選值（供 dashboard native filter 的選項使用）。
+ *
+ * 對 dataset 做 adhoc groupby 查詢取 distinct；走與 fetchChartData 相同的
+ * CSRF + POST /api/v1/chart/data 機制（含 pending polling）。
+ *
+ * - 結果在 JS 端再去重一次（Superset row_limit 截斷前已 groupby，此為安全網）。
+ * - cache 5 分鐘，key 含 scopeKey 防跨範圍 cache 洩漏。
+ */
+export async function fetchColumnValues(
+  datasetId: number,
+  column: string,
+  limit: number,
+  scopeKey?: string | null,
+): Promise<unknown[]> {
+  const isPerScope = config.DATA_AUTH_MODE === 'per-scope' && !!scopeKey;
+  const scopePart = isPerScope ? scopeKey : 'svc';
+  const cacheKey = `values:${datasetId}:${column}:${limit}:${scopePart}`;
+
+  const hit = cache.get(cacheKey);
+  if (hit) {
+    logger.debug({ datasetId, column, scope: scopePart }, 'column values cache hit');
+    return JSON.parse(hit) as unknown[];
+  }
+
+  const start = Date.now();
+
+  const jwt = isPerScope
+    ? await scopeTokenStore.getJwt(scopeKey)
+    : await supersetClient.getJwt();
+  const { csrfToken, cookieHeader } = await createCsrfSession(jwt);
+
+  const queryContext: QueryContext = {
+    datasource: { id: datasetId, type: 'table' },
+    queries: [
+      {
+        columns: [column],
+        groupby: [column],
+        metrics: [],
+        row_limit: limit,
+        orderby: [[column, true]],
+      },
+    ],
+    result_format: 'json',
+    result_type: 'full',
+  };
+
+  const payload = await executeChartData(queryContext, false, {
+    jwt,
+    csrfToken,
+    cookieHeader,
+    start,
+    logCtx: { datasetId, column },
+  });
+
+  const seen = new Set<string>();
+  const values: unknown[] = [];
+  for (const row of payload.rows) {
+    const v = row[column];
+    if (v === null || v === undefined) continue;
+    const key = JSON.stringify(v);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    values.push(v);
+  }
+
+  cache.set(cacheKey, JSON.stringify(values), VALUES_CACHE_TTL_S);
+  logger.debug(
+    { datasetId, column, count: values.length, ms: Date.now() - start },
+    'column values fetched',
+  );
+  return values;
+}
+
+interface ExecuteOptions {
+  jwt: string;
+  csrfToken: string;
+  cookieHeader: string;
+  start: number;
+  logCtx: Record<string, unknown>;
+}
+
+/**
+ * 對 /api/v1/chart/data 送出 query_context 並處理 async pending polling。
+ *
+ * 共用流程：fetchChartData（chart 既有 qc + filters）與 fetchColumnValues
+ * （adhoc dataset groupby）都呼叫此函式。
+ *
+ * polling 期間全程使用同一組 CSRF token + cookie（不可重新取得，否則
+ * async-token channel 會改變）。
+ */
+async function executeChartData(
+  queryContext: QueryContext,
+  force: boolean,
+  opts: ExecuteOptions,
+): Promise<ChartDataPayload> {
+  const { csrfToken, cookieHeader, jwt, start, logCtx } = opts;
+
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${jwt}`,
+    'Content-Type': 'application/json',
+    'X-CSRFToken': csrfToken,
+    Cookie: cookieHeader,
+    Referer: config.SUPERSET_URL,
+  };
+
+  // 第一次 POST（force 由 caller 決定）
   // - force:false → Superset 回傳 cached 結果或 trigger async job
   // - force:true  → Superset 忽略 cache，重新 trigger async job
-  const initialBody = JSON.stringify({ ...effectiveQueryContext, force });
+  const initialBody = JSON.stringify({ ...queryContext, force });
   const initialRes = await fetch(`${config.SUPERSET_URL}/api/v1/chart/data`, {
     method: 'POST',
     headers,
@@ -192,21 +301,19 @@ export async function fetchChartData(
   const initialData = (await initialRes.json()) as SupersetChartDataResponse;
 
   if (getStatus(initialData) !== 'pending') {
-    const result = mapResult(initialData);
-    cache.set(dedupKey, JSON.stringify(result), DATA_DEDUP_TTL_S);
-    logger.debug({ chartId, ms: Date.now() - start }, 'chart data returned immediately');
-    return result;
+    logger.debug({ ...logCtx, ms: Date.now() - start }, 'chart data returned immediately');
+    return mapResult(initialData);
   }
 
   // Polling loop — 使用同一組 headers（不重新取 CSRF）
-  const pollBody = JSON.stringify({ ...effectiveQueryContext, force: false });
+  const pollBody = JSON.stringify({ ...queryContext, force: false });
   const deadline = Date.now() + POLL_TIMEOUT_MS;
   let elapsed = 0;
 
   while (Date.now() < deadline) {
     await sleep(POLL_INTERVAL_MS);
     elapsed += POLL_INTERVAL_MS;
-    logger.debug({ chartId, elapsed }, 'polling chart data');
+    logger.debug({ ...logCtx, elapsed }, 'polling chart data');
 
     const pollRes = await fetch(`${config.SUPERSET_URL}/api/v1/chart/data`, {
       method: 'POST',
@@ -225,9 +332,8 @@ export async function fetchChartData(
 
     if (getStatus(pollData) !== 'pending') {
       const result = mapResult(pollData);
-      cache.set(dedupKey, JSON.stringify(result), DATA_DEDUP_TTL_S);
       logger.info(
-        { chartId, ms: Date.now() - start, cached: result.cached },
+        { ...logCtx, ms: Date.now() - start, cached: result.cached },
         'chart data ready',
       );
       return result;
@@ -235,7 +341,7 @@ export async function fetchChartData(
   }
 
   throw new GraphQLError(
-    `Chart ${chartId} 查詢逾時（${POLL_TIMEOUT_MS / 1000}s），請稍後重試`,
-    { extensions: { code: 'TIMEOUT', chartId } },
+    `查詢逾時（${POLL_TIMEOUT_MS / 1000}s），請稍後重試`,
+    { extensions: { code: 'TIMEOUT', ...logCtx } },
   );
 }
