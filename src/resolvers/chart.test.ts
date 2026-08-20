@@ -8,7 +8,7 @@
 //
 //   http://www.apache.org/licenses/LICENSE-2.0
 
-import { mapColumn, mapMetric } from './chart.js';
+import { mapColumn, mapMetric, parseWrappedChartIds } from './chart.js';
 import type { SupersetDatasetColumn, SupersetDatasetMetric } from '../superset/types.js';
 
 test('mapColumn maps a dimension column correctly', () => {
@@ -57,4 +57,27 @@ test('mapMetric falls back label to null when verbose_name is absent', () => {
     description: null,
   };
   expect(mapMetric(metric)).toEqual({ name: 'count', label: null, type: 'NUMERIC', isMetric: true });
+});
+
+// ---- parseWrappedChartIds ----
+
+test('parseWrappedChartIds extracts chart id from a wraps: tag', () => {
+  expect(parseWrappedChartIds(['wraps:38825328'])).toEqual([38825328]);
+});
+
+test('parseWrappedChartIds is case-insensitive on the prefix', () => {
+  expect(parseWrappedChartIds(['WRAPS:123'])).toEqual([123]);
+});
+
+test('parseWrappedChartIds collects multiple wraps tags and dedupes', () => {
+  const ids = parseWrappedChartIds(['wraps:123', 'wraps:456', 'wraps:123']);
+  expect(ids).toEqual([123, 456]);
+});
+
+test('parseWrappedChartIds ignores non-matching tags', () => {
+  expect(parseWrappedChartIds(['owner:1', 'type:chart', 'wraps:abc', 'wraps:'])).toEqual([]);
+});
+
+test('parseWrappedChartIds returns empty array for empty input', () => {
+  expect(parseWrappedChartIds([])).toEqual([]);
 });

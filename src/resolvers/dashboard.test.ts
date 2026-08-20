@@ -8,7 +8,7 @@
 //
 //   http://www.apache.org/licenses/LICENSE-2.0
 
-import { parseTabs, getChartIdsInTab } from './dashboard.js';
+import { parseTabs, getChartIdsInTab, collectWrappedChartIds } from './dashboard.js';
 import type { PositionJson } from '../superset/types.js';
 
 const samplePosition: PositionJson = {
@@ -117,4 +117,35 @@ test('getChartIdsInTab skips CHART nodes without meta.chartId', () => {
 
 test('getChartIdsInTab returns empty set on empty position', () => {
   expect(getChartIdsInTab({}, 'TAB-def').size).toBe(0);
+});
+
+// ---- collectWrappedChartIds ----
+
+test('collectWrappedChartIds unions wraps ids across multiple charts', () => {
+  const wrapped = collectWrappedChartIds([
+    { id: 306, tagNames: ['wraps:328', 'wraps:329'] },
+    { id: 328, tagNames: [] },
+    { id: 329, tagNames: [] },
+  ]);
+  expect(wrapped).toEqual(new Set([328, 329]));
+});
+
+test('collectWrappedChartIds dedupes when multiple charts wrap the same id', () => {
+  const wrapped = collectWrappedChartIds([
+    { id: 1, tagNames: ['wraps:99'] },
+    { id: 2, tagNames: ['wraps:99'] },
+  ]);
+  expect(wrapped).toEqual(new Set([99]));
+});
+
+test('collectWrappedChartIds returns empty set when no chart has a wraps tag', () => {
+  const wrapped = collectWrappedChartIds([
+    { id: 1, tagNames: ['owner:1'] },
+    { id: 2, tagNames: [] },
+  ]);
+  expect(wrapped.size).toBe(0);
+});
+
+test('collectWrappedChartIds returns empty set for empty input', () => {
+  expect(collectWrappedChartIds([]).size).toBe(0);
 });

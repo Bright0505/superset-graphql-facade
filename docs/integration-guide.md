@@ -262,7 +262,43 @@ query {
 
 ---
 
-### 7. AI Agent 用的圖表 Introspection
+### 7. 圖表包覆（wrappedCharts）
+
+某些圖表在語意上會「包覆」另一張圖表（例如同一頁籤內的主圖表與其附屬明細圖）。這個對應關係透過
+Superset chart 本身的 **Tag** 定義：在「外層」圖表上加一個 `wraps:<被包覆的 chart id>` tag（可加多個
+以包覆多張）。加上 tag 後：
+
+- `dashboard.charts(tab: ...)` 的頂層結果不會再包含被包覆的圖表，改由外層圖表的 `wrappedCharts`
+  欄位巢狀回傳。
+- `wrappedCharts` 是一般的 `Chart` 欄位，可以正常查詢 `data`、`columns` 等子欄位，也可以再往下巢狀
+  查詢自己的 `wrappedCharts`（若被包覆的圖表本身也有 `wraps:` tag）。
+
+```graphql
+query {
+  dashboard(id: "139") {
+    charts(tab: "TAB-xxxxxxxx") {
+      id
+      name
+      wrappedCharts {
+        id
+        name
+        data {
+          columnNames
+          rows
+        }
+      }
+    }
+  }
+}
+```
+
+> 加 tag 的方式：對該 chart 呼叫 `POST /api/v1/tag/2/<chart_id>/`（Superset REST API，`2` 代表
+> object type 為 chart），body 為 `{"properties": {"tags": ["wraps:<被包覆的 chart id>"]}}`。也可以在
+> Superset UI 的圖表清單頁用「Add tag」批次操作加上同名 tag。
+
+---
+
+### 8. AI Agent 用的圖表 Introspection
 
 ```graphql
 query {
@@ -419,6 +455,7 @@ result = query_graphql("""
 |---------|-----|
 | Dashboard position_json（選項卡）| 5 分鐘 |
 | Chart query_context | 5 分鐘 |
+| Chart tags（`wrappedCharts` 判斷用）| 5 分鐘 |
 | Chart data（無 filter）| 1 分鐘 |
 | Chart data（有 filter）| 1 分鐘（按 filter 內容獨立快取） |
 | Chart introspection | 5 分鐘 |

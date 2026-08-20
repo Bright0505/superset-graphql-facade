@@ -60,6 +60,8 @@ export const typeDefs = /* GraphQL */ `
     columns: [Column!]!
     "查詢實際數值；filters 會注入 Superset query_context 的 queries[0].filters"
     data(force: Boolean = false, filters: [ChartFilter!]): ChartData!
+    "此圖表包覆的其他圖表（來自 Superset tag \`wraps:<chartId>\`）"
+    wrappedCharts: [Chart!]!
   }
 
   """欄位定義（維度或指標）"""

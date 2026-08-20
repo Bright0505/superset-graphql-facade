@@ -11,8 +11,15 @@
 import { supersetClient } from '../superset/client.js';
 import { fetchChartData } from '../superset/polling.js';
 import { logger } from '../logger.js';
+import { cache } from '../cache/index.js';
 import type { AppContext } from '../auth/context.js';
 import type { SupersetDatasetColumn, SupersetDatasetMetric, SupersetDatasetResponse, ChartFilter } from '../superset/types.js';
+
+interface SupersetTag {
+  id: number;
+  name: string;
+  type: number;
+}
 
 interface SupersetChart {
   id: number;
@@ -20,12 +27,14 @@ interface SupersetChart {
   viz_type: string;
   description: string | null;
   datasource_id: number | null;
+  tags?: SupersetTag[];
 }
 
 interface SupersetChartResponse {
   result: SupersetChart;
 }
 
+const TAGS_CACHE_TTL_S = 300;
 
 function mapChart(c: SupersetChart) {
   return {
@@ -35,6 +44,34 @@ function mapChart(c: SupersetChart) {
     description: c.description ?? null,
     datasourceId: c.datasource_id ?? null,
   };
+}
+
+async function fetchChartById(id: string) {
+  logger.debug({ id }, 'chart query');
+  const data = await supersetClient.get<SupersetChartResponse>(`/api/v1/chart/${id}`);
+  return mapChart(data.result);
+}
+
+/** 解析 chart 的 Superset tag 名稱，找出 `wraps:<chartId>` 格式所指向的被包覆 chart id */
+export function parseWrappedChartIds(tagNames: string[]): number[] {
+  const ids = new Set<number>();
+  for (const name of tagNames) {
+    const match = /^wraps:(\d+)$/i.exec(name);
+    if (match) ids.add(Number(match[1]));
+  }
+  return [...ids];
+}
+
+/** 取得 chart 的 tag 名稱清單（5 分鐘快取，沿用 chart:{id}:qc 同等級 TTL）*/
+export async function fetchChartTagNames(chartId: string): Promise<string[]> {
+  const cacheKey = `chart:${chartId}:tags`;
+  const hit = cache.get(cacheKey);
+  if (hit) return JSON.parse(hit) as string[];
+
+  const data = await supersetClient.get<SupersetChartResponse>(`/api/v1/chart/${chartId}`);
+  const tagNames = (data.result.tags ?? []).map((t) => t.name);
+  cache.set(cacheKey, JSON.stringify(tagNames), TAGS_CACHE_TTL_S);
+  return tagNames;
 }
 
 export function mapColumn(col: SupersetDatasetColumn) {
@@ -58,11 +95,7 @@ export function mapMetric(m: SupersetDatasetMetric) {
 export const chartResolvers = {
   Query: {
     async chart(_parent: unknown, args: { id: string }) {
-      logger.debug({ id: args.id }, 'chart query');
-      const data = await supersetClient.get<SupersetChartResponse>(
-        `/api/v1/chart/${args.id}`,
-      );
-      return mapChart(data.result);
+      return fetchChartById(args.id);
     },
   },
 
@@ -93,6 +126,12 @@ export const chartResolvers = {
         args.filters ?? undefined,
         ctx.scope?.scopeKey,
       );
+    },
+
+    async wrappedCharts(parent: { id: string }) {
+      const tagNames = await fetchChartTagNames(parent.id);
+      const wrappedIds = parseWrappedChartIds(tagNames);
+      return Promise.all(wrappedIds.map((id) => fetchChartById(String(id))));
     },
   },
 };

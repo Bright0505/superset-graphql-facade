@@ -10,6 +10,7 @@
 
 import { supersetClient } from '../superset/client.js';
 import { fetchColumnValues } from '../superset/polling.js';
+import { fetchChartTagNames, parseWrappedChartIds } from './chart.js';
 import { logger } from '../logger.js';
 import { cache } from '../cache/index.js';
 import type { PositionNode, PositionJson } from '../superset/types.js';
@@ -65,6 +66,19 @@ export function getChartIdsInTab(pos: PositionJson, tabId: string): Set<number> 
     }
   }
   return ids;
+}
+
+/** 聯集每張 chart 的 `wraps:<chartId>` tag，算出目前被包覆（應從頂層排除）的 chart id 集合 */
+export function collectWrappedChartIds(
+  entries: Array<{ id: number; tagNames: string[] }>,
+): Set<number> {
+  const wrapped = new Set<number>();
+  for (const entry of entries) {
+    for (const id of parseWrappedChartIds(entry.tagNames)) {
+      wrapped.add(id);
+    }
+  }
+  return wrapped;
 }
 
 interface DashboardDetail {
@@ -198,7 +212,17 @@ export const dashboardResolvers = {
       if (!pos) return allCharts;
 
       const allowed = getChartIdsInTab(pos, args.tab);
-      return allCharts.filter((c) => allowed.has(Number(c.id)));
+      const tabCharts = allCharts.filter((c) => allowed.has(Number(c.id)));
+
+      // 排除被其他 chart 的 `wraps:<chartId>` tag 包覆的 chart，改由 Chart.wrappedCharts 巢狀回傳
+      const tagEntries = await Promise.all(
+        tabCharts.map(async (c) => ({
+          id: Number(c.id),
+          tagNames: await fetchChartTagNames(c.id),
+        })),
+      );
+      const wrapped = collectWrappedChartIds(tagEntries);
+      return tabCharts.filter((c) => !wrapped.has(Number(c.id)));
     },
 
     async filters(parent: { id: string }) {

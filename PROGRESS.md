@@ -97,6 +97,22 @@
 
 ---
 
+## Phase 4 — 圖表包覆（wrappedCharts）
+
+- [x] `src/schema/typeDefs.ts` — `Chart` 新增 `wrappedCharts: [Chart!]!`
+- [x] `src/resolvers/chart.ts` — 新增 `parseWrappedChartIds`（解析 `wraps:<chartId>` tag）、
+  `fetchChartTagNames`（5 分鐘 cache）、`Chart.wrappedCharts` resolver；抽出共用 `fetchChartById`
+- [x] `src/resolvers/dashboard.ts` — `Dashboard.charts(tab:)` 排除被包覆的 chart，新增
+  `collectWrappedChartIds`
+- [x] 新增單元測試：`chart.test.ts`（`parseWrappedChartIds`）、`dashboard.test.ts`
+  (`collectWrappedChartIds`)
+- [x] `docs/integration-guide.md` 新增第 7 節說明 `wrappedCharts` 與 tag 慣例
+- [ ] **[容器中驗證]** `docker compose run facade npm run lint` / `typecheck` / `test`
+- [ ] **[容器中驗證]** 用 dashboard 139 / tab `TAB-1Tf8zPbtU2GcDZ_Phq2yA` 實測：對 chart `38825306`
+  加 `wraps:38825328` tag，確認頂層 `charts` 不再含 `38825328`，且 `38825306.wrappedCharts` 正確回傳
+
+---
+
 ## 中斷恢復檢查清單
 
 如果重開機或中斷後不確定狀態,執行以下檢查:
