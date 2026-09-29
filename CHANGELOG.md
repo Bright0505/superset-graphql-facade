@@ -26,6 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Phase 2: in-memory TTL cache（`src/cache/index.ts`）：query_context 5min、data dedup 1min
 - Phase 2: `Chart.data` resolver 接真實 fetchChartData，帶結構化 error code
 
+### Fixed
+- `JSON` scalar 的 `parseLiteral` 原本只處理字串 literal，其餘一律回傳 `null`，導致 query 內直接寫 `filters: [{ col: "filter_month", op: "==", val: 9 }]` 時數字 `val` 變成 `null`（與透過 variables 傳入結果不一致）；改用 `valueFromASTUntyped` 支援 Int / Float / Boolean / Null / List / Object literal，字串 literal 維持原本的 `JSON.parse` 行為。新增 `src/schema/scalars.test.ts`。
+
 ### Changed
 - 重構：將 `SupersetDatasetColumn`、`SupersetDatasetMetric`、`SupersetDatasetDetail` 等重複型別定義合併至 `src/superset/types.ts`，chart.ts 與 introspection.ts 改從共用型別 import
 - 新增 `src/resolvers/chart.test.ts` 與 `src/resolvers/introspection.test.ts`，涵蓋 mapColumn/mapMetric/buildDescription/buildParameters 等 pure function 的單元測試
