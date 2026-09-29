@@ -8,18 +8,19 @@
 //
 //   http://www.apache.org/licenses/LICENSE-2.0
 
-import { GraphQLScalarType, Kind } from 'graphql';
+import { GraphQLScalarType, Kind, valueFromASTUntyped } from 'graphql';
 
 export const JSONScalar = new GraphQLScalarType({
   name: 'JSON',
   description: 'Arbitrary JSON value',
   serialize: (value) => value,
   parseValue: (value) => value,
-  parseLiteral: (ast) => {
+  parseLiteral: (ast, variables) => {
     if (ast.kind === Kind.STRING) {
       try { return JSON.parse(ast.value) as unknown; } catch { return ast.value; }
     }
-    return null;
+    // Int / Float / Boolean / Null / List / Object literals（含其中引用的 variables）
+    return valueFromASTUntyped(ast, variables);
   },
 });
 
